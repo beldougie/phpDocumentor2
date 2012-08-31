@@ -43,6 +43,7 @@ class AddLinkInformation
     public function process(\DOMDocument $xml)
     {
         $this->log('Adding path information to each xml "file" tag');
+		echo 'Adding path information to each xml "file" tag';
 
         $xpath = new \DOMXPath($xml);
 
@@ -107,30 +108,32 @@ class AddLinkInformation
         $qry = $xpath->query(
             '//docblock/tag[@name="throw" or @name="throws" or @name="see" '
             . 'or @name="uses" or @name="used_by" or @name="inherited_from" '
-            . 'or @name="covers" or @name="covered_by"]'.
-            '|(//docblock/tag[@name="link" '
-            . 'and (substring(@link,1,7) != \'http://\' '
-            . 'or substring(@link,1,4) != \'www.\''
-            . 'or substring(@link,1,7) != \'https://\')])'
+            . 'or @name="covers" or @name="covered_by" or @name="link"]'
+//            .
+//            '|(//docblock/tag[@name="link" '
+//            . 'and (substring(@link,1,7) != \'http://\' '
+//            . 'or substring(@link,1,4) != \'www.\''
+//            . 'or substring(@link,1,7) != \'https://\')])'
         );
         /** @var \DOMElement $element */
         foreach ($qry as $element) {
             switch($element->getAttribute('name')) {
             case 'link':
                 $name = $element->getAttribute('link');
-                break;
+//                break;
             case 'uses':
             case 'used_by':
             case 'covers':
             case 'covered_by':
             case 'see':
             case 'inherited_from':
-                $name = $element->getAttribute('refers');
+            	if(empty($name)) $name = $element->getAttribute('refers');
                 if (empty($name)) {
                     $name = $element->nodeValue;
                 }
                 else if ($name[0] !== '\\') {
                     $name = '\\' . $name;
+                    error_log("Name: $name");
                 }
                 break;
             default:

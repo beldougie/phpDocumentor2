@@ -82,7 +82,12 @@ class AddLinkInformation
             } else if (isset($class_paths[$type])) {
                 $file_name = $this->getTransformer()
                     ->generateFilename($class_paths[$type]);
-                $node->setAttribute('link', $file_name . '#' . $type);
+                   
+                if($node->parentNode->tagName == 'tag')
+                {
+                	$node->parentNode->setAttribute('link', $file_name . '#' . $bare_type);
+                }
+                $node->setAttribute('link', $file_name . '#' . $bare_type);
             } else if (isset($declared_classes[$bare_type])) {
                 // cache reflection calls since these can be expensive
                 if (!isset($unknown_classes[$bare_type])) {
@@ -102,7 +107,7 @@ class AddLinkInformation
             }
         }
 
-        // convert class names to links
+        // convert tags with class name, properties or methods to links
         $qry = $xpath->query(
             '//docblock/tag[@name="throw" or @name="throws" or @name="see" '
             . 'or @name="uses" or @name="used_by" or @name="inherited_from" '
@@ -134,15 +139,47 @@ class AddLinkInformation
                 break;
             }
             
-            if ($name[0] !== '\\') {
-                    $name = '\\' . $name;
-            }
-            $node_value = explode('::', $name);
+            // strip out the global namespace as this prevents finding any 
+            // matching classes
+            $name = str_replace('\\global\\','',$name);
 
+            $node_value = explode('::', $name);
+            
+            // if the only node value is a property or method name, find the 
+            // parent class and add it to the node_values array so the correct 
+            // anchor name can be constructed.
+            if(count($node_value) === 1 
+            	&& (strpos($name, '$') !== false 
+            	|| strpos($name, '()') !== false)) 
+            {
+            	$parentClassFound = false;
+            	$el = $element;
+            	while(!$parentClassFound)
+            	{
+            		$parent = $el->parentNode;
+            		if($parent->tagName !== 'class')
+            		{
+            			$el = $parent;
+            			continue;
+            		}
+            		// add the parent class name to $node_value
+            		$node_value[] = $parent->getElementsByTagName('name')->item(0)->nodeValue;
+            		// reverse the array so items are in the right order
+            		$node_value = array_reverse($node_value);
+            		break;
+            	}
+            }
+            
+            // add preceding backslash if it doesn't exist (so the search on 
+            // $class_paths works correctly
+        	if ($node_value[0] != "\\") 
+        	{
+        		$node_value[0] = '\\' . $node_value[0];
+            }
             if (isset($class_paths[$node_value[0]])) {
                 $file_name = $this->getTransformer()
                     ->generateFilename($class_paths[$node_value[0]]);
-                $element->setAttribute('link', $file_name . '#' . $name);
+                $element->setAttribute('link', $file_name . '#' . ltrim(implode("::", $node_value), "\\"));
             }
         }
 

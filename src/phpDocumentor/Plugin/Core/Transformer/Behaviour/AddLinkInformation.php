@@ -257,7 +257,7 @@ class AddLinkInformation
       		
       		// if the value of the first item in $node_value references a 
       		// method (in the current document) construct the correct url...
-      		if(substr($node_value[0],-2,2) === '()')
+      		if(substr($node_value[0],-2,2) === '()' || $node_value[0][0] === '$')
       		{
       			$nodePath = $this->currentElement->getNodePath();
       			$classQry = substr($nodePath, 0, strpos($nodePath, '/class/') + 6);

@@ -103,42 +103,40 @@ class AddLinkInformation
         }
 
         // convert class names to links
-        // this action also checks the link of an @link tag it it starts with
-        // `http://`, `https://` or `www.`. if not: also convert those.
         $qry = $xpath->query(
             '//docblock/tag[@name="throw" or @name="throws" or @name="see" '
             . 'or @name="uses" or @name="used_by" or @name="inherited_from" '
             . 'or @name="covers" or @name="covered_by" or @name="link"]'
-//            .
-//            '|(//docblock/tag[@name="link" '
-//            . 'and (substring(@link,1,7) != \'http://\' '
-//            . 'or substring(@link,1,4) != \'www.\''
-//            . 'or substring(@link,1,7) != \'https://\')])'
         );
         /** @var \DOMElement $element */
         foreach ($qry as $element) {
+
+        	//reset name to avoid incorrect reuse...
+        	$name = ''; 
+        	
             switch($element->getAttribute('name')) {
             case 'link':
                 $name = $element->getAttribute('link');
+                break;
             case 'uses':
             case 'used_by':
             case 'covers':
             case 'covered_by':
             case 'see':
             case 'inherited_from':
-            	if(empty($name)) $name = $element->getAttribute('refers');
+            	$name = $element->getAttribute('refers');
                 if (empty($name)) {
                     $name = $element->nodeValue;
-                }
-                else if ($name[0] !== '\\') {
-                    $name = '\\' . $name;
                 }
                 break;
             default:
                 $name = $element->nodeValue;
                 break;
             }
-
+            
+            if ($name[0] !== '\\') {
+                    $name = '\\' . $name;
+            }
             $node_value = explode('::', $name);
 
             if (isset($class_paths[$node_value[0]])) {
@@ -200,9 +198,12 @@ class AddLinkInformation
     {
         $this->log('Adding link information to inline @link tags');
 
+        $this->currentXpath = $xpath;
         $qry = $xpath->query('//long-description[contains(., "{@link ")]');
         
         $this->class_paths = $this->collectClassPaths($xpath);
+        
+        
 
         // variables are used to clarify function and improve readability
         $without_description_pattern = '/\{@link\s+([^\s]+)\s*\}/';
@@ -212,6 +213,8 @@ class AddLinkInformation
         /** @var \DOMElement $element */
         foreach ($qry as $element) {
 
+        	$this->currentElement = $element;
+        	
         	$element->nodeValue = preg_replace_callback(
         		array($without_description_pattern, $with_description_pattern),
         		array($this, 'performLinkReplacements'),
@@ -241,18 +244,49 @@ class AddLinkInformation
     	$name = $matches[1];
       	$nodeDescription = isset($matches[2])?$matches[2]:$matches[1];
       	
-    	if ($name[0] !== '\\') 
-    	{
-        	$name = '\\' . $name;
-        }
-    	$node_value = explode("::", $name);
-    	if(isset($this->class_paths[$node_value[0]]))
-    	{
-    		$file_name = $this->getTransformer()
-    			->generateFilename($this->class_paths[$node_value[0]]);
-    	}
-    	
-    	$uri = isset($file_name)?"$file_name#$name":$name;
+      	// If $name is a real URI got a real link, set it and move on
+      	if(substr($name, 0,7) === 'http://' 
+      		|| substr($name, 0,4) === 'www.' 
+      		|| substr($name, 0,8) === 'https://')
+      	{
+      		$uri = $name;
+      	} 
+      	else 
+      	{
+      		$node_value = explode("::", $name);
+      		
+      		// if the value of the first item in $node_value references a 
+      		// method (in the current document) construct the correct url...
+      		if(substr($node_value[0],-2,2) === '()')
+      		{
+      			$nodePath = $this->currentElement->getNodePath();
+      			$classQry = substr($nodePath, 0, strpos($nodePath, '/class/') + 6);
+      			$classQry.="/name";
+
+      			$classNameQry = $this->currentXpath->query($classQry);
+
+      			$node = $classNameQry->item(0);
+      			
+      			$node_value[] = $node->nodeValue;
+      			$node_value = array_reverse($node_value);
+      			
+      			$name = implode("::", $node_value);
+      		}  
+	    	
+	    		if ($node_value[0][0] !== '\\')
+	    		{
+	        		$node_value[0] = '\\' . $node_value[0];
+	    		}
+	        
+		    	if(isset($this->class_paths[$node_value[0]]))
+		    	{
+		    		$file_name = $this->getTransformer()
+		    			->generateFilename($this->class_paths[$node_value[0]]);
+		    	}
+		    	
+		    	$uri = isset($file_name)?$file_name.'#'.$name:$name;
+	    	}
+      	
     	
     	$returnValue = '<a href="'.$uri.'">'.$nodeDescription.'</a>';
     	
